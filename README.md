@@ -32,7 +32,7 @@ iain@rocketship:~$ docker build buildenv -t buildenv
 Then you can run the build env and pass through all the files. Change the path to suit.
 
 ```console
-iain@rocketship:~$ docker run --rm -it -v /home/iain/folderofos:/root/env myos-buildenv
+iain@rocketship:~$ docker run --rm -it -v /home/iain/folderofos:/root/env buildenv
 ```
 
 Now you are in the docker container you can build the OS.
