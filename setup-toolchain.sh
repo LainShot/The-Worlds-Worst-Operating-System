@@ -24,10 +24,10 @@ apt-get install -y grub-pc-bin
 apt-get install -y grub-common
 echo "All software installed"
 echo "I am now going setup the toolchain."
-wget https://github.com/lordmilko/i686-elf-tools/releases/download/7.1.0/i686-elf-tools-linux.zip
+wget https://github.com/lordmilko/i686-elf-tools/releases/download/7.1.0/x86_64-elf-tools-linux.zip
 echo "creating toolchain folder "
 mkdir toolchain
 echo "unziping toolchain into folder"
-unzip i686-elf-tools-linux -d ./toolchain
+unzip x86_64-elf-tools-linux -d ./toolchain
 echo "All installed you can now run make build-x86_64"
 
