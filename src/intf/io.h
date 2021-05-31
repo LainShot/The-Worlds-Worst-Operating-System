@@ -1,183 +1,438 @@
-/* Copyright (C) 1996-2020 Free Software Foundation, Inc.
-   This file is part of the GNU C Library.
+/* SPDX-License-Identifier: GPL-2.0 */
+#ifndef _ASM_X86_IO_H
+#define _ASM_X86_IO_H
 
-   The GNU C Library is free software; you can redistribute it and/or
-   modify it under the terms of the GNU Lesser General Public
-   License as published by the Free Software Foundation; either
-   version 2.1 of the License, or (at your option) any later version.
+/*
+ * This file contains the definitions for the x86 IO instructions
+ * inb/inw/inl/outb/outw/outl and the "string versions" of the same
+ * (insb/insw/insl/outsb/outsw/outsl). You can also use "pausing"
+ * versions of the single-IO instructions (inb_p/inw_p/..).
+ *
+ * This file is not meant to be obfuscating: it's just complicated
+ * to (a) handle it all in a way that makes gcc able to optimize it
+ * as well as possible and (b) trying to avoid writing the same thing
+ * over and over again with slight variations and possibly making a
+ * mistake somewhere.
+ */
 
-   The GNU C Library is distributed in the hope that it will be useful,
-   but WITHOUT ANY WARRANTY; without even the implied warranty of
-   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
-   Lesser General Public License for more details.
+/*
+ * Thanks to James van Artsdalen for a better timing-fix than
+ * the two short jumps: using outb's to a nonexistent port seems
+ * to guarantee better timings even on fast machines.
+ *
+ * On the other hand, I'd like to be sure of a non-existent port:
+ * I feel a bit unsafe about using 0x80 (should be safe, though)
+ *
+ *		Linus
+ */
 
-   You should have received a copy of the GNU Lesser General Public
-   License along with the GNU C Library; if not, see
-   <https://www.gnu.org/licenses/>.  */
+ /*
+  *  Bit simplified and optimized by Jan Hubicka
+  *  Support of BIGMEM added by Gerhard Wichert, Siemens AG, July 1999.
+  *
+  *  isa_memset_io, isa_memcpy_fromio, isa_memcpy_toio added,
+  *  isa_read[wl] and isa_write[wl] fixed
+  *  - Arnaldo Carvalho de Melo <acme@conectiva.com.br>
+  */
 
-#ifndef	_SYS_IO_H
-#define	_SYS_IO_H	1
+#define ARCH_HAS_IOREMAP_WC
+#define ARCH_HAS_IOREMAP_WT
 
-#include <features.h>
+#include <string.h>
+#include <compiler.h>
+#include <page.h>
+#include <early_ioremap.h>
+#include <pgtable_types.h>
 
-__BEGIN_DECLS
+#define build_mmio_read(name, size, type, reg, barrier) \
+static inline type name(const volatile void __iomem *addr) \
+{ type ret; asm volatile("mov" size " %1,%0":reg (ret) \
+:"m" (*(volatile type __force *)addr) barrier); return ret; }
 
-/* If TURN_ON is TRUE, request for permission to do direct i/o on the
-   port numbers in the range [FROM,FROM+NUM-1].  Otherwise, turn I/O
-   permission off for that range.  This call requires root privileges.
+#define build_mmio_write(name, size, type, reg, barrier) \
+static inline void name(type val, volatile void __iomem *addr) \
+{ asm volatile("mov" size " %0,%1": :reg (val), \
+"m" (*(volatile type __force *)addr) barrier); }
 
-   Portability note: not all Linux platforms support this call.  Most
-   platforms based on the PC I/O architecture probably will, however.
-   E.g., Linux/Alpha for Alpha PCs supports this.  */
-extern int ioperm (unsigned long int __from, unsigned long int __num,
-                   int __turn_on) __THROW;
+build_mmio_read(readb, "b", unsigned char, "=q", :"memory")
+build_mmio_read(readw, "w", unsigned short, "=r", :"memory")
+build_mmio_read(readl, "l", unsigned int, "=r", :"memory")
 
-/* Set the I/O privilege level to LEVEL.  If LEVEL>3, permission to
-   access any I/O port is granted.  This call requires root
-   privileges. */
-extern int iopl (int __level) __THROW;
+build_mmio_read(__readb, "b", unsigned char, "=q", )
+build_mmio_read(__readw, "w", unsigned short, "=r", )
+build_mmio_read(__readl, "l", unsigned int, "=r", )
 
-#if defined __GNUC__ && __GNUC__ >= 2
+build_mmio_write(writeb, "b", unsigned char, "q", :"memory")
+build_mmio_write(writew, "w", unsigned short, "r", :"memory")
+build_mmio_write(writel, "l", unsigned int, "r", :"memory")
 
-static __inline unsigned char
-inb (unsigned short int __port)
+build_mmio_write(__writeb, "b", unsigned char, "q", )
+build_mmio_write(__writew, "w", unsigned short, "r", )
+build_mmio_write(__writel, "l", unsigned int, "r", )
+
+#define readb readb
+#define readw readw
+#define readl readl
+#define readb_relaxed(a) __readb(a)
+#define readw_relaxed(a) __readw(a)
+#define readl_relaxed(a) __readl(a)
+#define __raw_readb __readb
+#define __raw_readw __readw
+#define __raw_readl __readl
+
+#define writeb writeb
+#define writew writew
+#define writel writel
+#define writeb_relaxed(v, a) __writeb(v, a)
+#define writew_relaxed(v, a) __writew(v, a)
+#define writel_relaxed(v, a) __writel(v, a)
+#define __raw_writeb __writeb
+#define __raw_writew __writew
+#define __raw_writel __writel
+
+#ifdef CONFIG_X86_64
+
+build_mmio_read(readq, "q", u64, "=r", :"memory")
+build_mmio_read(__readq, "q", u64, "=r", )
+build_mmio_write(writeq, "q", u64, "r", :"memory")
+build_mmio_write(__writeq, "q", u64, "r", )
+
+#define readq_relaxed(a)	__readq(a)
+#define writeq_relaxed(v, a)	__writeq(v, a)
+
+#define __raw_readq		__readq
+#define __raw_writeq		__writeq
+
+/* Let people know that we have them */
+#define readq			readq
+#define writeq			writeq
+
+#endif
+
+#define ARCH_HAS_VALID_PHYS_ADDR_RANGE
+extern int valid_phys_addr_range(phys_addr_t addr, size_t size);
+extern int valid_mmap_phys_addr_range(unsigned long pfn, size_t size);
+
+/**
+ *	virt_to_phys	-	map virtual addresses to physical
+ *	@address: address to remap
+ *
+ *	The returned physical address is the physical (CPU) mapping for
+ *	the memory address given. It is only valid to use this function on
+ *	addresses directly mapped or allocated via kmalloc.
+ *
+ *	This function does not give bus mappings for DMA transfers. In
+ *	almost all conceivable cases a device driver should not be using
+ *	this function
+ */
+
+static inline phys_addr_t virt_to_phys(volatile void *address)
 {
-  unsigned char _v;
+	return __pa(address);
+}
+#define virt_to_phys virt_to_phys
 
-  __asm__ __volatile__ ("inb %w1,%0":"=a" (_v):"Nd" (__port));
-  return _v;
+/**
+ *	phys_to_virt	-	map physical address to virtual
+ *	@address: address to remap
+ *
+ *	The returned virtual address is a current CPU mapping for
+ *	the memory address given. It is only valid to use this function on
+ *	addresses that have a kernel mapping
+ *
+ *	This function does not handle bus mappings for DMA transfers. In
+ *	almost all conceivable cases a device driver should not be using
+ *	this function
+ */
+
+static inline void *phys_to_virt(phys_addr_t address)
+{
+	return __va(address);
+}
+#define phys_to_virt phys_to_virt
+
+/*
+ * Change "struct page" to physical address.
+ */
+#define page_to_phys(page)    ((dma_addr_t)page_to_pfn(page) << PAGE_SHIFT)
+
+/*
+ * ISA I/O bus memory addresses are 1:1 with the physical address.
+ * However, we truncate the address to unsigned int to avoid undesirable
+ * promitions in legacy drivers.
+ */
+static inline unsigned int isa_virt_to_bus(volatile void *address)
+{
+	return (unsigned int)virt_to_phys(address);
+}
+#define isa_bus_to_virt		phys_to_virt
+
+/*
+ * However PCI ones are not necessarily 1:1 and therefore these interfaces
+ * are forbidden in portable PCI drivers.
+ *
+ * Allow them on x86 for legacy drivers, though.
+ */
+#define virt_to_bus virt_to_phys
+#define bus_to_virt phys_to_virt
+
+/*
+ * The default ioremap() behavior is non-cached; if you need something
+ * else, you probably want one of the following.
+ */
+extern void __iomem *ioremap_uc(resource_size_t offset, unsigned long size);
+#define ioremap_uc ioremap_uc
+extern void __iomem *ioremap_cache(resource_size_t offset, unsigned long size);
+#define ioremap_cache ioremap_cache
+extern void __iomem *ioremap_prot(resource_size_t offset, unsigned long size, unsigned long prot_val);
+#define ioremap_prot ioremap_prot
+extern void __iomem *ioremap_encrypted(resource_size_t phys_addr, unsigned long size);
+#define ioremap_encrypted ioremap_encrypted
+
+/**
+ * ioremap     -   map bus memory into CPU space
+ * @offset:    bus address of the memory
+ * @size:      size of the resource to map
+ *
+ * ioremap performs a platform specific sequence of operations to
+ * make bus memory CPU accessible via the readb/readw/readl/writeb/
+ * writew/writel functions and the other mmio helpers. The returned
+ * address is not guaranteed to be usable directly as a virtual
+ * address.
+ *
+ * If the area you are trying to map is a PCI BAR you should have a
+ * look at pci_iomap().
+ */
+void __iomem *ioremap(resource_size_t offset, unsigned long size);
+#define ioremap ioremap
+
+extern void iounmap(volatile void __iomem *addr);
+#define iounmap iounmap
+
+extern void set_iounmap_nonlazy(void);
+
+#ifdef __KERNEL__
+
+void memcpy_fromio(void *, const volatile void __iomem *, size_t);
+void memcpy_toio(volatile void __iomem *, const void *, size_t);
+void memset_io(volatile void __iomem *, int, size_t);
+
+#define memcpy_fromio memcpy_fromio
+#define memcpy_toio memcpy_toio
+#define memset_io memset_io
+
+#include <asm-generic/iomap.h>
+
+/*
+ * ISA space is 'always mapped' on a typical x86 system, no need to
+ * explicitly ioremap() it. The fact that the ISA IO space is mapped
+ * to PAGE_OFFSET is pure coincidence - it does not mean ISA values
+ * are physical addresses. The following constant pointer can be
+ * used as the IO-area pointer (it can be iounmapped as well, so the
+ * analogy with PCI is quite large):
+ */
+#define __ISA_IO_base ((char __iomem *)(PAGE_OFFSET))
+
+#endif /* __KERNEL__ */
+
+extern void native_io_delay(void);
+
+extern int io_delay_type;
+extern void io_delay_init(void);
+
+#if defined(CONFIG_PARAVIRT)
+#include <asm/paravirt.h>
+#else
+
+static inline void slow_down_io(void)
+{
+	native_io_delay();
+#ifdef REALLY_SLOW_IO
+	native_io_delay();
+	native_io_delay();
+	native_io_delay();
+#endif
 }
 
-static __inline unsigned char
-inb_p (unsigned short int __port)
-{
-  unsigned char _v;
+#endif
 
-  __asm__ __volatile__ ("inb %w1,%0\noutb %%al,$0x80":"=a" (_v):"Nd" (__port));
-  return _v;
+#ifdef CONFIG_AMD_MEM_ENCRYPT
+#include <linux/jump_label.h>
+
+extern struct static_key_false sev_enable_key;
+static inline bool sev_key_active(void)
+{
+	return static_branch_unlikely(&sev_enable_key);
 }
 
-static __inline unsigned short int
-inw (unsigned short int __port)
-{
-  unsigned short _v;
+#else /* !CONFIG_AMD_MEM_ENCRYPT */
 
-  __asm__ __volatile__ ("inw %w1,%0":"=a" (_v):"Nd" (__port));
-  return _v;
+static inline bool sev_key_active(void) { return false; }
+
+#endif /* CONFIG_AMD_MEM_ENCRYPT */
+
+#define BUILDIO(bwl, bw, type)						\
+static inline void out##bwl(unsigned type value, int port)		\
+{									\
+	asm volatile("out" #bwl " %" #bw "0, %w1"			\
+		     : : "a"(value), "Nd"(port));			\
+}									\
+									\
+static inline unsigned type in##bwl(int port)				\
+{									\
+	unsigned type value;						\
+	asm volatile("in" #bwl " %w1, %" #bw "0"			\
+		     : "=a"(value) : "Nd"(port));			\
+	return value;							\
+}									\
+									\
+static inline void out##bwl##_p(unsigned type value, int port)		\
+{									\
+	out##bwl(value, port);						\
+	slow_down_io();							\
+}									\
+									\
+static inline unsigned type in##bwl##_p(int port)			\
+{									\
+	unsigned type value = in##bwl(port);				\
+	slow_down_io();							\
+	return value;							\
+}									\
+									\
+static inline void outs##bwl(int port, const void *addr, unsigned long count) \
+{									\
+	if (sev_key_active()) {						\
+		unsigned type *value = (unsigned type *)addr;		\
+		while (count) {						\
+			out##bwl(*value, port);				\
+			value++;					\
+			count--;					\
+		}							\
+	} else {							\
+		asm volatile("rep; outs" #bwl				\
+			     : "+S"(addr), "+c"(count)			\
+			     : "d"(port) : "memory");			\
+	}								\
+}									\
+									\
+static inline void ins##bwl(int port, void *addr, unsigned long count)	\
+{									\
+	if (sev_key_active()) {						\
+		unsigned type *value = (unsigned type *)addr;		\
+		while (count) {						\
+			*value = in##bwl(port);				\
+			value++;					\
+			count--;					\
+		}							\
+	} else {							\
+		asm volatile("rep; ins" #bwl				\
+			     : "+D"(addr), "+c"(count)			\
+			     : "d"(port) : "memory");			\
+	}								\
 }
 
-static __inline unsigned short int
-inw_p (unsigned short int __port)
-{
-  unsigned short int _v;
+BUILDIO(b, b, char)
+BUILDIO(w, w, short)
+BUILDIO(l, , int)
 
-  __asm__ __volatile__ ("inw %w1,%0\noutb %%al,$0x80":"=a" (_v):"Nd" (__port));
-  return _v;
+#define inb inb
+#define inw inw
+#define inl inl
+#define inb_p inb_p
+#define inw_p inw_p
+#define inl_p inl_p
+#define insb insb
+#define insw insw
+#define insl insl
+
+#define outb outb
+#define outw outw
+#define outl outl
+#define outb_p outb_p
+#define outw_p outw_p
+#define outl_p outl_p
+#define outsb outsb
+#define outsw outsw
+#define outsl outsl
+
+extern void *xlate_dev_mem_ptr(phys_addr_t phys);
+extern void unxlate_dev_mem_ptr(phys_addr_t phys, void *addr);
+
+#define xlate_dev_mem_ptr xlate_dev_mem_ptr
+#define unxlate_dev_mem_ptr unxlate_dev_mem_ptr
+
+extern int ioremap_change_attr(unsigned long vaddr, unsigned long size,
+				enum page_cache_mode pcm);
+extern void __iomem *ioremap_wc(resource_size_t offset, unsigned long size);
+#define ioremap_wc ioremap_wc
+extern void __iomem *ioremap_wt(resource_size_t offset, unsigned long size);
+#define ioremap_wt ioremap_wt
+
+extern bool is_early_ioremap_ptep(pte_t *ptep);
+
+#define IO_SPACE_LIMIT 0xffff
+
+#include <asm-generic/io.h>
+#undef PCI_IOBASE
+
+#ifdef CONFIG_MTRR
+extern int __must_check arch_phys_wc_index(int handle);
+#define arch_phys_wc_index arch_phys_wc_index
+
+extern int __must_check arch_phys_wc_add(unsigned long base,
+					 unsigned long size);
+extern void arch_phys_wc_del(int handle);
+#define arch_phys_wc_add arch_phys_wc_add
+#endif
+
+#ifdef CONFIG_X86_PAT
+extern int arch_io_reserve_memtype_wc(resource_size_t start, resource_size_t size);
+extern void arch_io_free_memtype_wc(resource_size_t start, resource_size_t size);
+#define arch_io_reserve_memtype_wc arch_io_reserve_memtype_wc
+#endif
+
+extern bool arch_memremap_can_ram_remap(resource_size_t offset,
+					unsigned long size,
+					unsigned long flags);
+#define arch_memremap_can_ram_remap arch_memremap_can_ram_remap
+
+extern bool phys_mem_access_encrypted(unsigned long phys_addr,
+				      unsigned long size);
+
+/**
+ * iosubmit_cmds512 - copy data to single MMIO location, in 512-bit units
+ * @__dst: destination, in MMIO space (must be 512-bit aligned)
+ * @src: source
+ * @count: number of 512 bits quantities to submit
+ *
+ * Submit data from kernel space to MMIO space, in units of 512 bits at a
+ * time.  Order of access is not guaranteed, nor is a memory barrier
+ * performed afterwards.
+ *
+ * Warning: Do not use this helper unless your driver has checked that the CPU
+ * instruction is supported on the platform.
+ */
+static inline void iosubmit_cmds512(void __iomem *__dst, const void *src,
+				    size_t count)
+{
+	/*
+	 * Note that this isn't an "on-stack copy", just definition of "dst"
+	 * as a pointer to 64-bytes of stuff that is going to be overwritten.
+	 * In the MOVDIR64B case that may be needed as you can use the
+	 * MOVDIR64B instruction to copy arbitrary memory around. This trick
+	 * lets the compiler know how much gets clobbered.
+	 */
+	volatile struct { char _[64]; } *dst = __dst;
+	const u8 *from = src;
+	const u8 *end = from + count * 64;
+
+	while (from < end) {
+		/* MOVDIR64B [rdx], rax */
+		asm volatile(".byte 0x66, 0x0f, 0x38, 0xf8, 0x02"
+			     : "=m" (dst)
+			     : "d" (from), "a" (dst));
+		from += 64;
+	}
 }
 
-static __inline unsigned int
-inl (unsigned short int __port)
-{
-  unsigned int _v;
-
-  __asm__ __volatile__ ("inl %w1,%0":"=a" (_v):"Nd" (__port));
-  return _v;
-}
-
-static __inline unsigned int
-inl_p (unsigned short int __port)
-{
-  unsigned int _v;
-  __asm__ __volatile__ ("inl %w1,%0\noutb %%al,$0x80":"=a" (_v):"Nd" (__port));
-  return _v;
-}
-
-static __inline void
-outb (unsigned char __value, unsigned short int __port)
-{
-  __asm__ __volatile__ ("outb %b0,%w1": :"a" (__value), "Nd" (__port));
-}
-
-static __inline void
-outb_p (unsigned char __value, unsigned short int __port)
-{
-  __asm__ __volatile__ ("outb %b0,%w1\noutb %%al,$0x80": :"a" (__value),
-			"Nd" (__port));
-}
-
-static __inline void
-outw (unsigned short int __value, unsigned short int __port)
-{
-  __asm__ __volatile__ ("outw %w0,%w1": :"a" (__value), "Nd" (__port));
-
-}
-
-static __inline void
-outw_p (unsigned short int __value, unsigned short int __port)
-{
-  __asm__ __volatile__ ("outw %w0,%w1\noutb %%al,$0x80": :"a" (__value),
-			"Nd" (__port));
-}
-
-static __inline void
-outl (unsigned int __value, unsigned short int __port)
-{
-  __asm__ __volatile__ ("outl %0,%w1": :"a" (__value), "Nd" (__port));
-}
-
-static __inline void
-outl_p (unsigned int __value, unsigned short int __port)
-{
-  __asm__ __volatile__ ("outl %0,%w1\noutb %%al,$0x80": :"a" (__value),
-			"Nd" (__port));
-}
-
-static __inline void
-insb (unsigned short int __port, void *__addr, unsigned long int __count)
-{
-  __asm__ __volatile__ ("cld ; rep ; insb":"=D" (__addr), "=c" (__count)
-			:"d" (__port), "0" (__addr), "1" (__count));
-}
-
-static __inline void
-insw (unsigned short int __port, void *__addr, unsigned long int __count)
-{
-  __asm__ __volatile__ ("cld ; rep ; insw":"=D" (__addr), "=c" (__count)
-			:"d" (__port), "0" (__addr), "1" (__count));
-}
-
-static __inline void
-insl (unsigned short int __port, void *__addr, unsigned long int __count)
-{
-  __asm__ __volatile__ ("cld ; rep ; insl":"=D" (__addr), "=c" (__count)
-			:"d" (__port), "0" (__addr), "1" (__count));
-}
-
-static __inline void
-outsb (unsigned short int __port, const void *__addr,
-       unsigned long int __count)
-{
-  __asm__ __volatile__ ("cld ; rep ; outsb":"=S" (__addr), "=c" (__count)
-			:"d" (__port), "0" (__addr), "1" (__count));
-}
-
-static __inline void
-outsw (unsigned short int __port, const void *__addr,
-       unsigned long int __count)
-{
-  __asm__ __volatile__ ("cld ; rep ; outsw":"=S" (__addr), "=c" (__count)
-			:"d" (__port), "0" (__addr), "1" (__count));
-}
-
-static __inline void
-outsl (unsigned short int __port, const void *__addr,
-       unsigned long int __count)
-{
-  __asm__ __volatile__ ("cld ; rep ; outsl":"=S" (__addr), "=c" (__count)
-			:"d" (__port), "0" (__addr), "1" (__count));
-}
-
-#endif	/* GNU C */
-
-__END_DECLS
-#endif /* _SYS_IO_H */
+#endif /* _ASM_X86_IO_H */
