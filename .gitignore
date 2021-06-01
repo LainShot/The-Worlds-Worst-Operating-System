@@ -1,4 +1,6 @@
 toolchain/
 *.o
 *.obj
+*.bin
+*.iso
 *.zip
