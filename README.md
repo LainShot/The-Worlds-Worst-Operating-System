@@ -32,6 +32,32 @@ Load up the new iso folder on a qemu virtual machine from the root directory.
 qemu-system-x86_64 -cdrom dist/x86_64/kernel.iso
 ```
 
+### Docker
+
+if you wish you can use docker to setup everything you need instead of doing the above, all you have to do is make sure that you have docker installed. 
+Then you can run the following.
+
+Create the docker image:
+
+```console
+iain@rocketship:~$  chmod +x ./build-docker-image.sh
+iain@rocketship:~$  ./build-docker-image.sh
+```
+
+Run the docker image, this will work on platforms that are not even X86_64 such as Apple M1 and ARM.
+
+```console
+iain@rocketship:~$  chmod +x ./start-docker-env.sh
+iain@rocketship:~$  ./start-docker-env.sh
+```
+
+Now you should be in the docker container so just build the tool chain and you are away!
+
+iain@dockercontainer:~$ chmod +x setup-toolchain.sh
+iain@dockercontainer:~$ sudo ./setup-toolchain.sh
+iain@dockercontainer:~$  make build-x86_64
+
+
 ### Current Staus 
 
 Broken - Working on the VGA driver (VGA.C) and getting 1024x768 video mode running, currently not compiling. 
