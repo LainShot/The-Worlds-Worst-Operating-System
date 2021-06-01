@@ -22,6 +22,8 @@ apt-get install -y nasm
 apt-get install -y xorriso
 apt-get install -y grub-pc-bin
 apt-get install -y grub-common
+apt-get install -y wget
+apt-get install -y unzip
 echo "All software installed"
 echo "I am now going setup the toolchain."
 wget https://github.com/lordmilko/i686-elf-tools/releases/download/7.1.0/x86_64-elf-tools-linux.zip
