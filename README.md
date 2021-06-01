@@ -53,10 +53,11 @@ iain@rocketship:~$  ./start-docker-env.sh
 
 Now you should be in the docker container so just build the tool chain and you are away!
 
+```console
 iain@dockercontainer:~$ chmod +x setup-toolchain.sh
 iain@dockercontainer:~$ sudo ./setup-toolchain.sh
 iain@dockercontainer:~$  make build-x86_64
-
+```
 
 ### Current Staus 
 
