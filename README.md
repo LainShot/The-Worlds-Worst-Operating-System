@@ -23,7 +23,7 @@ iain@rocketship:~$ sudo ./setup-toolchain.sh
 Then you can run the build now you have the toolchain.
 
 ```console
-iain@rocketship:~$  make build-x86_64
+iain@rocketship:~$ make build-x86_64
 ```
 
 Load up the new iso folder on a qemu virtual machine from the root directory. 
@@ -40,23 +40,23 @@ Then you can run the following.
 Create the docker image:
 
 ```console
-iain@rocketship:~$  chmod +x ./build-docker-image.sh
-iain@rocketship:~$  ./build-docker-image.sh
+iain@rocketship:~$ chmod +x ./build-docker-image.sh
+iain@rocketship:~$ ./build-docker-image.sh
 ```
 
 Run the docker image, this will work on platforms that are not even X86_64 such as Apple M1 and ARM.
 
 ```console
-iain@rocketship:~$  chmod +x ./start-docker-env.sh
-iain@rocketship:~$  ./start-docker-env.sh
+iain@rocketship:~$ chmod +x ./start-docker-env.sh
+iain@rocketship:~$ ./start-docker-env.sh
 ```
 
 Now you should be in the docker container so just build the tool chain and you are away!
 
 ```console
 iain@dockercontainer:~$ chmod +x setup-toolchain.sh
-iain@dockercontainer:~$ sudo ./setup-toolchain.sh
-iain@dockercontainer:~$  make build-x86_64
+iain@dockercontainer:~$ ./setup-toolchain.sh
+iain@dockercontainer:~$ make build-x86_64
 ```
 
 ### Current Staus 
