@@ -18,6 +18,8 @@ echo "======================================="
 echo "TOOL CHAIN SETUP SCRIPT"
 echo "======================================="
 echo "Installing software needed"
+apt-get update -y
+apt-get install -y mtools
 apt-get install -y nasm
 apt-get install -y xorriso
 apt-get install -y grub-pc-bin
